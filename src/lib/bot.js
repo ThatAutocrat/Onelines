@@ -9,10 +9,16 @@ export const BOT_USERNAME = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.lengt
 export const BOT_WAIT_MS  = 30_000 // 30 seconds before bot kicks in
 
 export async function getBotSentence(previousSentences, apiKey) {
+  const turnNum = previousSentences.length + 1
+  console.group(`🤖 Bot turn ${turnNum}`)
+
   if (!apiKey) {
-    // Fallback sentences if no API key — still feels creative
+    console.warn('❌ No API key found — using hardcoded fallback')
+    console.groupEnd()
     return getFallbackSentence(previousSentences)
   }
+
+  console.log('🔑 API key present, calling Groq...')
 
   const storyText = previousSentences
     .map((s, i) => `${i + 1}. ${s.text}`)
@@ -42,7 +48,7 @@ Rules:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user',   content: userPrompt }
@@ -52,12 +58,24 @@ Rules:
       })
     })
 
-    if (!res.ok) throw new Error(`Groq error ${res.status}`)
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      console.error(`❌ Groq HTTP ${res.status}:`, errBody)
+      throw new Error(`Groq error ${res.status}`)
+    }
     const data = await res.json()
     const text = data.choices?.[0]?.message?.content?.trim()
-    return text || getFallbackSentence(previousSentences)
+    if (text) {
+      console.log('✅ Groq responded:', text)
+      console.groupEnd()
+      return text
+    }
+    console.warn('⚠️ Groq returned empty text, using fallback')
+    console.groupEnd()
+    return getFallbackSentence(previousSentences)
   } catch (err) {
-    console.warn('Groq bot error, using fallback:', err)
+    console.error('❌ Groq error, using fallback:', err.message)
+    console.groupEnd()
     return getFallbackSentence(previousSentences)
   }
 }
