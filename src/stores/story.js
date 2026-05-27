@@ -13,6 +13,7 @@ export const useStoryStore = defineStore('story', () => {
   const inQueue         = ref(false)
   const isBotGame       = ref(false)
   const botThinking     = ref(false)
+  let isBotTurning  = false
   const savedStories    = ref([])
   const partnerTyping   = ref(false)
   const turnSecondsLeft = ref(TURN_SECONDS)
@@ -75,6 +76,8 @@ export const useStoryStore = defineStore('story', () => {
 
   async function triggerBotTurn() {
     if (!isBotGame.value || !currentStory.value) return
+    if (isBotTurning) return  // prevent double-trigger
+    isBotTurning = true
     botThinking.value = true
 
     // Simulate typing delay like a real person (1.5–4s)
@@ -83,6 +86,7 @@ export const useStoryStore = defineStore('story', () => {
 
     const text = await getBotSentence(sentences.value, GROQ_KEY)
     botThinking.value = false
+    isBotTurning = false
 
     const auth = useAuthStore()
     const story = currentStory.value
@@ -297,6 +301,7 @@ export const useStoryStore = defineStore('story', () => {
     sentences.value       = []
     inQueue.value         = false
     isBotGame.value       = false
+    isBotTurning          = false
     botThinking.value     = false
     partnerTyping.value   = false
     turnSecondsLeft.value = TURN_SECONDS
