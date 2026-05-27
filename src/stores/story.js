@@ -160,16 +160,17 @@ export const useStoryStore = defineStore('story', () => {
         if (s) currentStory.value = s
         // In bot game, after INSERT fires and sentences are fresh → trigger bot
         if (isBotGame.value && s?.status === 'active') {
-          // Only trigger if it's NOT the user's turn (meaning user just went)
-          const auth = useAuthStore()
-          if (s?.turn === auth.user.id) {
-            // Bot already responded, it's user's turn again — just wait
-            startTurnTimer()
-          } else {
+          // User sentences are at even indices (0, 2, 4…), bot at odd.
+          // If the total count is odd, the user just went → bot's turn.
+          const freshCount = (fresh || []).length
+          if (freshCount % 2 === 1) {
             // User just submitted — bot goes now
             partnerTyping.value = true
             await triggerBotTurn()
             partnerTyping.value = false
+          } else {
+            // Bot just responded — it's user's turn again
+            startTurnTimer()
           }
         } else {
           startTurnTimer()
