@@ -158,9 +158,19 @@ export const useStoryStore = defineStore('story', () => {
         sentences.value = fresh || []
         const { data: s } = await supabase.from('stories').select('*').eq('id', storyId).single()
         if (s) currentStory.value = s
-        // In bot game, after user adds sentence → trigger bot
-        if (isBotGame.value && s?.turn === s?.player1_id && s?.status === 'active') {
-          await triggerBotTurn()
+        // In bot game, after INSERT fires and sentences are fresh → trigger bot
+        if (isBotGame.value && s?.status === 'active') {
+          // Only trigger if it's NOT the user's turn (meaning user just went)
+          const auth = useAuthStore()
+          if (s?.turn === auth.user.id) {
+            // Bot already responded, it's user's turn again — just wait
+            startTurnTimer()
+          } else {
+            // User just submitted — bot goes now
+            partnerTyping.value = true
+            await triggerBotTurn()
+            partnerTyping.value = false
+          }
         } else {
           startTurnTimer()
         }
@@ -212,13 +222,6 @@ export const useStoryStore = defineStore('story', () => {
     }).eq('id', story.id)
 
     await clearTyping()
-
-    // In bot game, trigger bot immediately after user submits
-    if (isBotGame.value && !isComplete) {
-      partnerTyping.value = true
-      await triggerBotTurn()
-      partnerTyping.value = false
-    }
   }
 
   // ── Typing ─────────────────────────────────────────────
