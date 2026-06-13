@@ -13,12 +13,21 @@ export const useStoryStore = defineStore('story', () => {
   const inQueue         = ref(false)
   const isBotGame       = ref(false)
   const botThinking     = ref(false)
-  let isBotTurning  = false
   const savedStories    = ref([])
   const partnerTyping   = ref(false)
   const turnSecondsLeft = ref(TURN_SECONDS)
   const storyChannel    = ref(null)
   const queueChannel    = ref(null)
+
+  // Use a module-level Set to track sentence IDs we've already rendered.
+  // This prevents the realtime channel from adding the same sentence twice
+  // if the INSERT event fires before our manual refetch returns.
+  const seenSentenceIds = new Set()
+
+  // Atomic bot-turn lock — a plain boolean isn't enough because the realtime
+  // callback is async; use a Promise-based mutex instead.
+  let botTurnPromise = null
+
   let turnTimer     = null
   let typingTimeout = null
 
@@ -29,14 +38,15 @@ export const useStoryStore = defineStore('story', () => {
   }
 
   function startTurnTimer() {
+    // Never run the countdown during a bot game — the bot decides its own pacing
+    if (isBotGame.value) return
     clearInterval(turnTimer)
     turnSecondsLeft.value = TURN_SECONDS
     turnTimer = setInterval(async () => {
       turnSecondsLeft.value--
       if (turnSecondsLeft.value <= 0) {
         clearInterval(turnTimer)
-        if (isBotGame.value) await triggerBotTurn()
-        else await autoSkipTurn()
+        await autoSkipTurn()
       }
     }, 1000)
   }
@@ -53,14 +63,14 @@ export const useStoryStore = defineStore('story', () => {
   async function startBotStory() {
     const auth = useAuthStore()
     isBotGame.value = true
+    botTurnPromise  = null
+    seenSentenceIds.clear()
 
-    // Create a local bot story (no real player2 in DB — use auth user as both)
-    // We store BOT_ID as player2 conceptually but use user's id for DB constraints
     const { data: story } = await supabase
       .from('stories')
       .insert({
         player1_id: auth.user.id,
-        player2_id: auth.user.id, // bot shares the slot
+        player2_id: auth.user.id,
         status: 'active',
         turn: auth.user.id,
         prompt: null
@@ -76,35 +86,53 @@ export const useStoryStore = defineStore('story', () => {
 
   async function triggerBotTurn() {
     if (!isBotGame.value || !currentStory.value) return
-    if (isBotTurning) return  // prevent double-trigger
-    isBotTurning = true
+
+    // If a bot turn is already in progress, wait for it instead of spawning another
+    if (botTurnPromise) {
+      await botTurnPromise
+      return
+    }
+
+    botTurnPromise = _runBotTurn()
+    try {
+      await botTurnPromise
+    } finally {
+      botTurnPromise = null
+    }
+  }
+
+  async function _runBotTurn() {
     botThinking.value = true
 
-    // Simulate typing delay like a real person (1.5–4s)
-    const delay = 1500 + Math.random() * 2500
+    // Human-like typing delay (1.5–3.5s)
+    const delay = 1500 + Math.random() * 2000
     await new Promise(r => setTimeout(r, delay))
 
-    const text = await getBotSentence(sentences.value, GROQ_KEY)
+    // Snapshot current sentences so we generate from stable state
+    const currentSentences = [...sentences.value]
+    const text = await getBotSentence(currentSentences, GROQ_KEY)
+
     botThinking.value = false
-    isBotTurning = false
 
-    const auth = useAuthStore()
+    const auth  = useAuthStore()
     const story = currentStory.value
-    const isComplete = sentences.value.length + 1 >= 10
+    if (!story) return
 
-    // Insert bot sentence attributed to the user's id but marked with bot username via profile workaround
-    // We insert with user's id and store bot name in a separate way — simplest: just insert normally
-    // and the UI shows "GhostWriter" based on isBotGame flag
-    await supabase.from('sentences').insert({
+    const isComplete = currentSentences.length + 1 >= 10
+
+    const { data: newRow } = await supabase.from('sentences').insert({
       story_id: story.id,
-      user_id: auth.user.id, // needed for RLS — bot reuses auth user slot
+      user_id:  auth.user.id,
       text,
-      votes: 0,
+      votes:    0,
       reported: false,
-    })
+    }).select().single()
+
+    // Pre-register the ID so the realtime handler doesn't double-add it
+    if (newRow?.id) seenSentenceIds.add(newRow.id)
 
     await supabase.from('stories').update({
-      turn: isComplete ? null : auth.user.id,
+      turn:   isComplete ? null : auth.user.id,
       status: isComplete ? 'complete' : 'active'
     }).eq('id', story.id)
   }
@@ -130,7 +158,7 @@ export const useStoryStore = defineStore('story', () => {
     const auth = useAuthStore()
     const { data, error } = await supabase.rpc('match_players', {
       p_user_id: auth.user.id,
-      p_genre: genre
+      p_genre:   genre
     })
     if (error) { console.error('matchmaking rpc error', error); return }
     if (data) {
@@ -146,36 +174,61 @@ export const useStoryStore = defineStore('story', () => {
   }
 
   // ── Sentences ──────────────────────────────────────────
+  async function _refetchSentences(storyId) {
+    const { data: fresh } = await supabase
+      .from('sentences')
+      .select('*, profiles(username)')
+      .eq('story_id', storyId)
+      .order('created_at', { ascending: true })
+
+    if (!fresh) return []
+
+    // Merge: keep existing local sentences, add any new ones not yet seen
+    const incoming = fresh.filter(s => {
+      if (seenSentenceIds.has(s.id)) return false
+      seenSentenceIds.add(s.id)
+      return true
+    })
+
+    if (incoming.length > 0) {
+      sentences.value = fresh // full authoritative list from DB
+    }
+
+    return fresh
+  }
+
   function listenToStory(storyId) {
     if (storyChannel.value) {
       supabase.removeChannel(storyChannel.value)
       storyChannel.value = null
     }
+
     const ch = supabase.channel(`story-${storyId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'sentences',
         filter: `story_id=eq.${storyId}`
-      }, async () => {
-        const { data: fresh } = await supabase
-          .from('sentences').select('*, profiles(username)')
-          .eq('story_id', storyId).order('created_at', { ascending: true })
-        sentences.value = fresh || []
-        const { data: s } = await supabase.from('stories').select('*').eq('id', storyId).single()
+      }, async (payload) => {
+        // Deduplicate: if we already have this sentence (e.g. we inserted it
+        // ourselves in _runBotTurn and pre-registered the ID), skip the refetch
+        const incomingId = payload.new?.id
+        if (incomingId && seenSentenceIds.has(incomingId)) return
+
+        const fresh = await _refetchSentences(storyId)
+
+        // Refresh story metadata
+        const { data: s } = await supabase
+          .from('stories').select('*').eq('id', storyId).single()
         if (s) currentStory.value = s
-        // In bot game, after INSERT fires and sentences are fresh → trigger bot
+
         if (isBotGame.value && s?.status === 'active') {
-          // User sentences are at even indices (0, 2, 4…), bot at odd.
-          // If the total count is odd, the user just went → bot's turn.
-          const freshCount = (fresh || []).length
+          const freshCount = fresh.length
+          // Odd count → user just went → bot's turn
           if (freshCount % 2 === 1) {
-            // User just submitted — bot goes now
             partnerTyping.value = true
             await triggerBotTurn()
             partnerTyping.value = false
-          } else {
-            // Bot just responded — it's user's turn again
-            startTurnTimer()
           }
+          // Even count → bot just responded → user's turn (no timer needed in bot mode)
         } else {
           startTurnTimer()
         }
@@ -183,7 +236,9 @@ export const useStoryStore = defineStore('story', () => {
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'stories',
         filter: `id=eq.${storyId}`
-      }, (p) => { currentStory.value = p.new })
+      }, (p) => {
+        currentStory.value = p.new
+      })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'typing',
         filter: `story_id=eq.${storyId}`
@@ -197,32 +252,46 @@ export const useStoryStore = defineStore('story', () => {
         if (p.eventType === 'DELETE') partnerTyping.value = false
       })
       .subscribe()
+
     storyChannel.value = ch
   }
 
   async function loadSentences(storyId) {
+    seenSentenceIds.clear()
     const { data } = await supabase
-      .from('sentences').select('*, profiles(username)')
-      .eq('story_id', storyId).order('created_at', { ascending: true })
-    sentences.value = data || []
+      .from('sentences')
+      .select('*, profiles(username)')
+      .eq('story_id', storyId)
+      .order('created_at', { ascending: true })
+
+    const loaded = data || []
+    loaded.forEach(s => seenSentenceIds.add(s.id))
+    sentences.value = loaded
     listenToStory(storyId)
   }
 
   async function addSentence(text) {
-    const auth = useAuthStore()
+    const auth  = useAuthStore()
     const story = currentStory.value
     if (!story || story.turn !== auth.user.id) return
     clearInterval(turnTimer)
 
     const isComplete = sentences.value.length + 1 >= 10
-    const nextTurn = story.player1_id === auth.user.id ? story.player2_id : story.player1_id
+    const nextTurn   = story.player1_id === auth.user.id ? story.player2_id : story.player1_id
 
-    await supabase.from('sentences').insert({
-      story_id: story.id, user_id: auth.user.id,
-      text, votes: 0, reported: false
-    })
+    const { data: newRow } = await supabase.from('sentences').insert({
+      story_id: story.id,
+      user_id:  auth.user.id,
+      text,
+      votes:    0,
+      reported: false,
+    }).select().single()
+
+    // Pre-register so the realtime INSERT doesn't double-render this sentence
+    if (newRow?.id) seenSentenceIds.add(newRow.id)
+
     await supabase.from('stories').update({
-      turn: isComplete ? null : (isBotGame.value ? auth.user.id : nextTurn),
+      turn:   isComplete ? null : (isBotGame.value ? auth.user.id : nextTurn),
       status: isComplete ? 'complete' : 'active'
     }).eq('id', story.id)
 
@@ -234,8 +303,8 @@ export const useStoryStore = defineStore('story', () => {
     const auth = useAuthStore()
     if (!currentStory.value) return
     await supabase.from('typing').upsert({
-      user_id: auth.user.id,
-      story_id: currentStory.value.id,
+      user_id:    auth.user.id,
+      story_id:   currentStory.value.id,
       updated_at: new Date().toISOString()
     })
   }
@@ -264,7 +333,7 @@ export const useStoryStore = defineStore('story', () => {
   async function saveStory() {
     const auth = useAuthStore()
     await supabase.from('saved_stories').insert({
-      user_id: auth.user.id,
+      user_id:  auth.user.id,
       story_id: currentStory.value.id
     })
   }
@@ -301,10 +370,11 @@ export const useStoryStore = defineStore('story', () => {
     sentences.value       = []
     inQueue.value         = false
     isBotGame.value       = false
-    isBotTurning          = false
+    botTurnPromise        = null
     botThinking.value     = false
     partnerTyping.value   = false
     turnSecondsLeft.value = TURN_SECONDS
+    seenSentenceIds.clear()
   }
 
   return {

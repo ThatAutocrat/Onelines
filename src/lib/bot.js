@@ -1,4 +1,4 @@
-// Bot powered by Groq (free tier) — llama3-70b
+// Bot powered by Groq (free tier) — llama-3.3-70b-versatile
 // Get your free API key at: https://console.groq.com
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -7,6 +7,19 @@ const BOT_NAMES    = ['NightOwl', 'VoidInk', 'SilentPage', 'GhostQuill', 'Wander
 export const BOT_ID       = 'bot-oneline'
 export const BOT_USERNAME = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
 export const BOT_WAIT_MS  = 30_000 // 30 seconds before bot kicks in
+
+// Infer rough tone/genre from the story so far so we can tell the model what it's working with
+function inferTone(sentences) {
+  if (!sentences.length) return null
+  const joined = sentences.map(s => s.text).join(' ').toLowerCase()
+  if (/blood|death|kill|dark|shadow|corpse|haunt|ghost|fear|scream/.test(joined)) return 'dark / horror'
+  if (/laugh|joke|absurd|ridiculous|banana|clown|silly|chaos/.test(joined)) return 'absurdist / comedic'
+  if (/love|heart|miss|longing|kiss|tender|ache/.test(joined)) return 'romantic / melancholic'
+  if (/space|planet|galaxy|ship|robot|android|future|laser/.test(joined)) return 'sci-fi'
+  if (/sword|castle|dragon|magic|wizard|kingdom|elf|quest/.test(joined)) return 'fantasy'
+  if (/detective|murder|suspect|clue|crime|police|witness/.test(joined)) return 'mystery / thriller'
+  return 'literary fiction'
+}
 
 export async function getBotSentence(previousSentences, apiKey) {
   const turnNum = previousSentences.length + 1
@@ -20,25 +33,38 @@ export async function getBotSentence(previousSentences, apiKey) {
 
   console.log('🔑 API key present, calling Groq...')
 
-  const storyText = previousSentences
-    .map((s, i) => `${i + 1}. ${s.text}`)
+  const isOpening = previousSentences.length === 0
+  const tone      = inferTone(previousSentences)
+
+  // Give the model the FULL story so far, clearly formatted
+  const fullStory = previousSentences
+    .map((s, i) => `[${i + 1}] ${s.text}`)
     .join('\n')
 
-  const isOpening = previousSentences.length === 0
+  // Pull out just the last sentence as a direct hook for the continuation
+  const lastSentence = previousSentences.length
+    ? previousSentences[previousSentences.length - 1].text
+    : null
 
-  const systemPrompt = `You are a creative fiction writer collaborating on a one-sentence-at-a-time story with a stranger. 
-Your writing style is literary, unpredictable, and vivid — like a real author. 
-You avoid clichés. You surprise the reader. You advance the story meaningfully.
-Rules:
-- Write EXACTLY one sentence. No more.
-- Never start with "I" or "The" if the previous sentence already did.
-- Match the tone and genre of what's already written.
-- Don't wrap up or end the story — leave it open.
-- No quotation marks around your response. Just the sentence itself.`
+  const remainingTurns = 10 - previousSentences.length
+
+  const systemPrompt = `You are a skilled co-author on a collaborative one-sentence-at-a-time story. \
+Your ONLY job is to write the single next sentence — nothing else.
+
+ABSOLUTE RULES:
+- Output EXACTLY one sentence. No preamble, no explanation, no quotation marks. Just the sentence.
+- The sentence must flow naturally and directly from the last line written.
+- Stay inside the world, tone, and genre already established — do not pivot or reset.
+- Introduce ONE small forward movement: a new detail, a reaction, a revelation, a shift in tension. Not a full plot twist.
+- Never wrap up or conclude the story. ${remainingTurns} sentences remain — leave room.
+- No clichés. No "suddenly", "little did they know", "in that moment".
+- Do not start with "I" or repeat the same opening word as the last sentence.`
 
   const userPrompt = isOpening
-    ? `Start a story with one compelling opening sentence. Make it intriguing — something that makes the reader desperate to know what happens next.`
-    : `Here is the story so far:\n\n${storyText}\n\nWrite the next sentence to continue this story. Be creative and unexpected.`
+    ? `Start a collaborative story with one compelling opening sentence. \
+Make it specific, grounded, and intriguing — establish a character, place, or object that begs a question. \
+Avoid generic openings. No weather. No waking up.`
+    : `STORY SO FAR (${previousSentences.length} of 10 sentences written, genre: ${tone}):\n\n${fullStory}\n\n---\nLast sentence: "${lastSentence}"\n\nWrite sentence ${turnNum} — the direct continuation of that last line. One sentence only.`
 
   try {
     const res = await fetch(GROQ_API_URL, {
@@ -51,10 +77,11 @@ Rules:
         model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user',   content: userPrompt }
+          { role: 'user',   content: userPrompt   }
         ],
-        max_tokens: 120,
-        temperature: 0.92,
+        max_tokens: 100,
+        temperature: 0.85,
+        stop: ['\n', '.  ', '!  ', '?  '], // stop after first sentence ends
       })
     })
 
@@ -63,13 +90,20 @@ Rules:
       console.error(`❌ Groq HTTP ${res.status}:`, errBody)
       throw new Error(`Groq error ${res.status}`)
     }
+
     const data = await res.json()
-    const text = data.choices?.[0]?.message?.content?.trim()
+    let text = data.choices?.[0]?.message?.content?.trim()
+
     if (text) {
+      // Strip any accidental leading labels like "Sentence 3:" or "[3]"
+      text = text.replace(/^(\[?\d+\]?:?\s*|sentence\s*\d+:?\s*)/i, '').trim()
+      // Strip surrounding quotes if the model added them
+      text = text.replace(/^["']|["']$/g, '').trim()
       console.log('✅ Groq responded:', text)
       console.groupEnd()
       return text
     }
+
     console.warn('⚠️ Groq returned empty text, using fallback')
     console.groupEnd()
     return getFallbackSentence(previousSentences)
@@ -87,6 +121,8 @@ const openingFallbacks = [
   'She had been collecting other people\'s grocery lists for eleven years before she finally understood why.',
   'The last lighthouse keeper left behind only a jar of teeth and a note that read: "They were here first."',
   'When the translation finally came back, the archaeologist closed her laptop and booked the first flight home.',
+  'A door opened at the end of the corridor that had not been there yesterday.',
+  'The dog came back, but it wasn\'t the same dog.',
 ]
 
 const continuationFallbacks = [
@@ -98,6 +134,8 @@ const continuationFallbacks = [
   'He laughed, which was the wrong reaction, and they both knew it.',
   'There were footprints leading in — none leading out.',
   'The message was only four words, but she read it seventeen times.',
+  'Whatever it was, it had been waiting.',
+  'The door at the end of the hall was the only one without a shadow beneath it.',
 ]
 
 function getFallbackSentence(previous) {
