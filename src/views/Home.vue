@@ -1,7 +1,7 @@
 <template>
   <div class="pt-8 pb-16">
     <div class="text-center mb-12">
-      <div class="inline-block mb-4 px-4 py-2 bg-brand-yellow/30 rounded-full text-sm font-500 text-brand-brown">
+      <div class="inline-block mb-4 px-4 py-2 bg-brand-yellow/20 dark:bg-brand-yellow/10 rounded-full text-sm font-500 text-brand-brown dark:text-brand-cream">
         ✨ Collaborative storytelling
       </div>
       <h1 class="font-display text-5xl font-600 leading-tight mb-4">
@@ -21,7 +21,7 @@
       </div>
     </div>
 
-    <div class="card mb-6 bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200">
+    <div class="card mb-6 bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-brand-surface dark:to-brand-surface border-orange-200 dark:border-brand-border">
       <div class="flex items-center gap-2 mb-3">
         <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
         <span class="text-sm font-500 opacity-60">Example story</span>
