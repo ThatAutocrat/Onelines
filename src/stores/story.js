@@ -288,7 +288,11 @@ export const useStoryStore = defineStore('story', () => {
     }).select().single()
 
     // Pre-register so the realtime INSERT doesn't double-render this sentence
-    if (newRow?.id) seenSentenceIds.add(newRow.id)
+    if (newRow?.id) {
+      seenSentenceIds.add(newRow.id)
+      // Optimistically push to UI immediately — don't wait for realtime
+      sentences.value = [...sentences.value, { ...newRow, profiles: { username: auth.profile?.username ?? 'You' } }]
+    }
 
     await supabase.from('stories').update({
       turn:   isComplete ? null : (isBotGame.value ? auth.user.id : nextTurn),
@@ -296,6 +300,12 @@ export const useStoryStore = defineStore('story', () => {
     }).eq('id', story.id)
 
     await clearTyping()
+
+    // In bot games, trigger the bot directly — realtime won't do it because
+    // we pre-registered the sentence ID and the INSERT handler skips it
+    if (isBotGame.value && !isComplete) {
+      triggerBotTurn()
+    }
   }
 
   // ── Typing ─────────────────────────────────────────────
