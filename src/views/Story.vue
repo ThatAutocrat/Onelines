@@ -94,9 +94,9 @@
       />
       <div class="flex items-center justify-between mt-3">
         <span class="text-xs opacity-30">{{ input.length }}/280 · Enter to submit</span>
-        <button :disabled="!input.trim()" @click="submit"
+        <button :disabled="!input.trim() || submitting" @click="submit"
           class="btn-primary text-sm py-2 px-5 disabled:opacity-30 disabled:cursor-not-allowed">
-          Add sentence →
+          {{ submitting ? 'Sending…' : 'Add sentence →' }}
         </button>
       </div>
     </div>
@@ -124,13 +124,13 @@ const router     = useRouter()
 const storyStore = useStoryStore()
 const authStore  = useAuthStore()
 const input      = ref('')
+const submitting = ref(false)
 
 const sentences    = computed(() => storyStore.sentences)
 const story        = computed(() => storyStore.currentStory)
-const isMyTurn     = computed(() => story.value?.turn === authStore.user?.id)
+const isMyTurn     = computed(() => story.value?.turn === authStore.user?.id && !submitting.value)
 const timerWarning = computed(() => storyStore.turnSecondsLeft <= 60)
 
-// In bot game, odd-indexed sentences (0,2,4…) are user, even-indexed are bot
 function isUserSentence(s, i) {
   if (!storyStore.isBotGame) return s.user_id === authStore.user?.id
   return i % 2 === 0
@@ -157,10 +157,12 @@ function onInput() {
 }
 
 async function submit() {
-  if (!input.value.trim()) return
+  if (!input.value.trim() || submitting.value) return
+  submitting.value = true
   playSubmit()
   await storyStore.addSentence(input.value.trim())
   input.value = ''
+  submitting.value = false
 }
 
 async function vote(s)   { await storyStore.voteSentence(s.id, s.votes) }
