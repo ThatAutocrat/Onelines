@@ -129,7 +129,11 @@ export const useStoryStore = defineStore('story', () => {
     }).select().single()
 
     // Pre-register the ID so the realtime handler doesn't double-add it
-    if (newRow?.id) seenSentenceIds.add(newRow.id)
+    if (newRow?.id) {
+      seenSentenceIds.add(newRow.id)
+      // Push to UI immediately — realtime skips it since ID is pre-registered
+      sentences.value = [...sentences.value, { ...newRow, profiles: { username: BOT_USERNAME } }]
+    }
 
     await supabase.from('stories').update({
       turn:   isComplete ? null : auth.user.id,
