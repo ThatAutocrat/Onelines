@@ -1,7 +1,7 @@
 <template>
   <div class="pt-6">
     <!-- Bot game banner -->
-    <div v-if="storyStore.isBotGame" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-2xl bg-brand-warm border border-orange-200 text-sm">
+    <div v-if="storyStore.isBotGame" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-2xl bg-brand-warm dark:bg-brand-surface border border-orange-200 dark:border-brand-border text-sm dark:text-brand-cream">
       <span>👻</span>
       <span class="opacity-70">Writing with a <strong>Ghost Writer</strong> — no real stranger was found</span>
     </div>
