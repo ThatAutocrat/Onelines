@@ -16,11 +16,11 @@
         <router-link to="/feed"    class="text-sm font-500 opacity-60 hover:opacity-100 transition-opacity no-underline text-current">Feed</router-link>
         <router-link to="/library" class="text-sm font-500 opacity-60 hover:opacity-100 transition-opacity no-underline text-current">Library</router-link>
         <button @click="toggleSound" :title="soundOn ? 'Mute sounds' : 'Enable sounds'"
-          class="w-9 h-9 rounded-full flex items-center justify-center bg-brand-warm hover:bg-orange-100 transition-colors border-none cursor-pointer text-base">
+          class="w-9 h-9 rounded-full flex items-center justify-center bg-brand-warm dark:bg-brand-surface hover:bg-orange-100 dark:hover:bg-brand-border transition-colors border-none cursor-pointer text-base">
           {{ soundOn ? '🔊' : '🔇' }}
         </button>
         <button @click="dark = !dark"
-          class="w-9 h-9 rounded-full flex items-center justify-center bg-brand-warm hover:bg-orange-100 transition-colors border-none cursor-pointer text-lg">
+          class="w-9 h-9 rounded-full flex items-center justify-center bg-brand-warm dark:bg-brand-surface hover:bg-orange-100 dark:hover:bg-brand-border transition-colors border-none cursor-pointer text-lg">
           {{ dark ? '☀️' : '🌙' }}
         </button>
       </div>
@@ -36,13 +36,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { setSoundEnabled, isSoundEnabled } from '@/lib/sounds'
+import { setSoundEnabled } from '@/lib/sounds'
 
-const dark     = ref(false)
-const online   = ref(navigator.onLine)
-const soundOn  = ref(true)
+const dark      = ref(false)
+const online    = ref(navigator.onLine)
+const soundOn   = ref(true)
 const authStore = useAuthStore()
 
 function toggleSound() {
@@ -68,7 +68,6 @@ onUnmounted(() => {
   window.removeEventListener('offline', handleOffline)
 })
 
-import { watch } from 'vue'
 watch(dark,    v => localStorage.setItem('oneline-dark',  v))
 watch(soundOn, v => localStorage.setItem('oneline-sound', v))
 </script>
