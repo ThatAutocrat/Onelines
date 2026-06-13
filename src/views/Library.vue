@@ -23,7 +23,7 @@
       <div
         v-for="item in stories"
         :key="item.id"
-        class="card hover:border-orange-200 transition-colors cursor-pointer"
+        class="card hover:border-orange-200 dark:hover:border-brand-orange/40 transition-colors cursor-pointer"
         @click="expanded = expanded === item.id ? null : item.id"
       >
         <div class="flex items-start justify-between gap-4">
@@ -36,13 +36,13 @@
             </p>
           </div>
           <div class="flex gap-2 shrink-0">
-            <button @click.stop="exportStory(item)" class="tag bg-brand-warm text-brand-brown text-xs hover:bg-orange-100 transition-colors border-none cursor-pointer">
+            <button @click.stop="exportStory(item)" class="tag bg-brand-warm dark:bg-brand-border text-brand-brown dark:text-brand-cream text-xs hover:bg-orange-100 dark:hover:bg-brand-surface transition-colors border-none cursor-pointer">
               ↓ Export
             </button>
           </div>
         </div>
 
-        <div v-if="expanded === item.id" class="mt-4 pt-4 border-t border-orange-100 space-y-3">
+        <div v-if="expanded === item.id" class="mt-4 pt-4 border-t border-orange-100 dark:border-brand-border space-y-3">
           <div v-for="(s, i) in item.stories?.sentences" :key="s.id" class="flex gap-3 items-start">
             <span class="text-xs opacity-30 w-4 shrink-0 mt-1">{{ i + 1 }}</span>
             <div>
