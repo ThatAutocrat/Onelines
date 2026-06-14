@@ -6,14 +6,14 @@
       <p class="opacity-60 text-sm">You and a stranger wrote something together.</p>
     </div>
 
-    <div class="card mb-6 text-left bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200">
+    <div class="card mb-6 text-left bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-brand-surface dark:to-brand-surface border-orange-200 dark:border-brand-border">
       <div class="space-y-4">
         <div v-for="(s, i) in sentences" :key="s.id" class="flex gap-3 items-start group">
           <span class="text-xs opacity-30 w-4 shrink-0 mt-1">{{ i + 1 }}</span>
           <div class="flex-1">
             <p class="font-display italic text-sm leading-relaxed mb-1">{{ s.text }}</p>
             <div class="flex items-center gap-3">
-              <span :class="['tag text-xs', isMe(s.user_id) ? 'bg-brand-orange/15 text-brand-orange' : 'bg-brand-yellow/30 text-brand-brown']">
+              <span :class="['tag text-xs', isMe(s.user_id) ? 'bg-brand-orange/15 text-brand-orange' : 'bg-brand-yellow/30 text-brand-brown dark:text-brand-cream']">
                 {{ isMe(s.user_id) ? 'You' : (s.profiles?.username ?? 'Stranger') }}
               </span>
               <button @click="vote(s)" class="text-xs flex items-center gap-1 text-brand-orange hover:text-orange-600 border-none bg-transparent cursor-pointer p-0">
