@@ -74,7 +74,7 @@
             <span class="text-xs opacity-30 w-4 shrink-0 mt-1">{{ i + 1 }}</span>
             <div>
               <p class="font-display italic text-sm leading-relaxed">{{ s.text }}</p>
-              <span class="tag text-xs bg-brand-orange/10 text-brand-orange mt-1">{{ s.profiles?.username ?? 'Anonymous' }}</span>
+              <span class="tag text-xs bg-brand-orange/10 text-brand-orange mt-1">{{ i % 2 === 0 ? 'User 1' : 'User 2' }}</span>
             </div>
           </div>
         </div>
