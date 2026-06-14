@@ -16,10 +16,10 @@
 
     <!-- Top this week leaderboard -->
     <div v-if="activeTab === 'top'" class="mb-6">
-      <div class="card bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200 mb-4">
+      <div class="card bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-brand-surface dark:to-brand-surface border-yellow-200 dark:border-brand-border mb-4">
         <p class="text-xs font-600 text-brand-orange mb-3">🏆 Top Stories This Week</p>
         <div v-if="topStories.length === 0" class="text-center py-4 opacity-40 text-sm">No stories yet this week</div>
-        <div v-for="(s, i) in topStories" :key="s.id" class="flex items-center gap-3 py-2 border-b border-orange-100 last:border-0">
+        <div v-for="(s, i) in topStories" :key="s.id" class="flex items-center gap-3 py-2 border-b border-orange-100 dark:border-brand-border last:border-0">
           <span class="font-display text-2xl font-600 text-brand-orange w-6 shrink-0">{{ i + 1 }}</span>
           <div class="flex-1 min-w-0">
             <p class="font-display italic text-sm leading-relaxed truncate opacity-80">
@@ -69,7 +69,7 @@
           </div>
         </div>
 
-        <div v-if="expanded === story.id" class="mt-4 pt-4 border-t border-orange-100 space-y-3">
+        <div v-if="expanded === story.id" class="mt-4 pt-4 border-t border-orange-100 dark:border-brand-border space-y-3">
           <div v-for="(s, i) in story.sentences" :key="s.id" class="flex gap-3">
             <span class="text-xs opacity-30 w-4 shrink-0 mt-1">{{ i + 1 }}</span>
             <div>
