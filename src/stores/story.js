@@ -102,6 +102,7 @@ export const useStoryStore = defineStore('story', () => {
   }
 
   async function _runBotTurn() {
+    console.log('🤖 _runBotTurn started')
     botThinking.value = true
 
     // Human-like typing delay (1.5–3.5s)
@@ -110,17 +111,21 @@ export const useStoryStore = defineStore('story', () => {
 
     // Snapshot current sentences so we generate from stable state
     const currentSentences = [...sentences.value]
+    console.log('🤖 currentSentences count:', currentSentences.length)
+
     const text = await getBotSentence(currentSentences, GROQ_KEY)
+    console.log('🤖 got text from Groq:', text)
 
     botThinking.value = false
 
     const auth  = useAuthStore()
     const story = currentStory.value
-    if (!story) return
+    if (!story) { console.error('🤖 no story, aborting'); return }
 
     const isComplete = currentSentences.length + 1 >= 10
+    console.log('🤖 inserting sentence to DB, isComplete:', isComplete)
 
-    const { data: newRow } = await supabase.from('sentences').insert({
+    const { data: newRow, error: insertErr } = await supabase.from('sentences').insert({
       story_id: story.id,
       user_id:  auth.user.id,
       text,
@@ -128,17 +133,26 @@ export const useStoryStore = defineStore('story', () => {
       reported: false,
     }).select().single()
 
+    if (insertErr) { console.error('🤖 DB insert error:', insertErr); return }
+    console.log('🤖 inserted row:', newRow)
+
     // Pre-register the ID so the realtime handler doesn't double-add it
     if (newRow?.id) {
       seenSentenceIds.add(newRow.id)
       // Push to UI immediately — realtime skips it since ID is pre-registered
       sentences.value = [...sentences.value, { ...newRow, profiles: { username: BOT_USERNAME } }]
+      console.log('🤖 pushed to UI, sentences now:', sentences.value.length)
+    } else {
+      console.error('🤖 newRow has no id — insert may have been blocked by RLS')
     }
 
-    await supabase.from('stories').update({
+    const { error: updateErr } = await supabase.from('stories').update({
       turn:   isComplete ? null : auth.user.id,
       status: isComplete ? 'complete' : 'active'
     }).eq('id', story.id)
+
+    if (updateErr) console.error('🤖 story update error:', updateErr)
+    else console.log('🤖 story turn updated, isComplete:', isComplete)
   }
 
   // ── Queue ──────────────────────────────────────────────
@@ -181,7 +195,7 @@ export const useStoryStore = defineStore('story', () => {
   async function _refetchSentences(storyId) {
     const { data: fresh } = await supabase
       .from('sentences')
-      .select('*, profiles(username)')
+      .select('*, profiles!sentences_user_id_fkey(username)')
       .eq('story_id', storyId)
       .order('created_at', { ascending: true })
 
@@ -264,7 +278,7 @@ export const useStoryStore = defineStore('story', () => {
     seenSentenceIds.clear()
     const { data } = await supabase
       .from('sentences')
-      .select('*, profiles(username)')
+      .select('*, profiles!sentences_user_id_fkey(username)')
       .eq('story_id', storyId)
       .order('created_at', { ascending: true })
 
@@ -356,7 +370,7 @@ export const useStoryStore = defineStore('story', () => {
     const auth = useAuthStore()
     const { data } = await supabase
       .from('saved_stories')
-      .select('*, stories(*, sentences(*, profiles(username)))')
+      .select('*, stories(*, sentences(*, profiles!sentences_user_id_fkey(username)))')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
     savedStories.value = data || []
