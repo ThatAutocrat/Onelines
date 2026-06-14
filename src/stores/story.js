@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from './auth'
 import { getBotSentence, BOT_ID, BOT_USERNAME } from '@/lib/bot'
+// BOT_ID = '00000000-0000-0000-0000-000000000001' — must exist in profiles table
 
 const TURN_SECONDS = 300
 const GROQ_KEY     = import.meta.env.VITE_GROQ_API_KEY
@@ -127,7 +128,7 @@ export const useStoryStore = defineStore('story', () => {
 
     const { data: newRow, error: insertErr } = await supabase.from('sentences').insert({
       story_id: story.id,
-      user_id:  auth.user.id,
+      user_id:  BOT_ID,
       text,
       votes:    0,
       reported: false,
