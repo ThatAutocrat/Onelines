@@ -4,7 +4,7 @@
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const BOT_NAMES    = ['NightOwl', 'VoidInk', 'SilentPage', 'GhostQuill', 'WanderingWord']
 
-export const BOT_ID       = 'bot-oneline'
+export const BOT_ID       = '00000000-0000-0000-0000-000000000001'
 export const BOT_USERNAME = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
 export const BOT_WAIT_MS  = 30_000 // 30 seconds before bot kicks in
 
