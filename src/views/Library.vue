@@ -48,7 +48,7 @@
             <div>
               <p class="font-display italic text-sm leading-relaxed">{{ s.text }}</p>
               <span class="tag text-xs bg-brand-orange/10 text-brand-orange mt-1">
-                {{ i % 2 === 0 ? 'User 1' : 'User 2' }}
+                {{ i % 2 === 0 ? 'Writer 1' : 'Writer 2' }}
               </span>
             </div>
           </div>
